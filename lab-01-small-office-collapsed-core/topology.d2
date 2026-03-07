@@ -1,0 +1,71 @@
+direction: right
+
+classes: {
+  router: {
+    shape: cylinder
+    style: {
+      fill: "#39FF14"
+      stroke: "#16a34a"
+      stroke-width: 2
+      border-radius: 10
+      shadow: true
+    }
+  }
+  switch: {
+    shape: queue
+    style: {
+      fill: "#ccfbf1"
+      stroke: "#0d9488"
+      border-radius: 10
+      shadow: true
+    }
+  }
+  endpoint: {
+    shape: rectangle
+    style: {
+      fill: "#0047AB"
+      stroke: "#002366"
+      stroke-width: 2
+      font-color: white
+      border-radius: 10
+      shadow: true
+    }
+  }
+}
+
+Internet: Internet {
+  shape: cloud
+}
+
+Edge Layer: {
+  edge-router: Edge-Router\nNAT, DHCP, Firewall {
+    class: router
+  }
+}
+
+Core Layer: {
+  core-switch: Core-Switch\nInter-VLAN Routing {
+    class: switch
+  }
+}
+
+Access Layer: {
+  access-switch: Access-Switch\n802.1Q Trunking {
+    class: switch
+  }
+}
+
+Endpoints: {
+  pc-admin: PC-Admin\nVLAN 10 {
+    class: endpoint
+  }
+  voip-phone: VoIP-Phone\nVLAN 20 {
+    class: endpoint
+  }
+}
+
+Internet -> Edge Layer.edge-router: eth0
+Edge Layer.edge-router -> Core Layer.core-switch: eth1
+Core Layer.core-switch -> Access Layer.access-switch: Trunk
+Access Layer.access-switch -> Endpoints.pc-admin: VLAN 10
+Access Layer.access-switch -> Endpoints.voip-phone: VLAN 20

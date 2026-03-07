@@ -1,0 +1,217 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+VAGRANTFILE_API_VERSION = "2"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  # Generic Alpine box for endpoints
+  ALPINE_BOX = "generic/alpine318"
+  # VyOS 1.4 box for network devices
+  VYOS_BOX = "vyos/vyos"
+
+  # ======================================================================
+  # 1. Edge-Router (VyOS)
+  # ======================================================================
+  config.vm.define "edge-router" do |node|
+    node.vm.box = VYOS_BOX
+    node.vm.hostname = "edge-router"
+    
+    # eth1: Connection to Core-Switch
+    node.vm.network "private_network", virtualbox__intnet: "edge_core", auto_config: false
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "edge-router"
+      vb.memory = "1024"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      source /opt/vyatta/etc/functions/script-template
+      configure
+      
+      # Interfaces
+      set interfaces ethernet eth1 address '10.0.0.1/30'
+      set interfaces ethernet eth1 description 'To-Core-Switch'
+      
+      # Routing
+      set protocols static route 192.168.0.0/16 next-hop '10.0.0.2'
+      
+      # NAT
+      set nat source rule 100 outbound-interface name 'eth0'
+      set nat source rule 100 source address '192.168.0.0/16'
+      set nat source rule 100 translation address 'masquerade'
+      set nat source rule 110 outbound-interface name 'eth0'
+      set nat source rule 110 source address '10.0.0.0/30'
+      set nat source rule 110 translation address 'masquerade'
+      
+      # Firewall (Basic OUTSIDE-LOCAL)
+      set firewall ipv4 name OUTSIDE-LOCAL default-action 'drop'
+      set firewall ipv4 name OUTSIDE-LOCAL rule 10 action 'accept'
+      set firewall ipv4 name OUTSIDE-LOCAL rule 10 state established 'enable'
+      set firewall ipv4 name OUTSIDE-LOCAL rule 10 state related 'enable'
+      set interfaces ethernet eth0 firewall local ipv4 name 'OUTSIDE-LOCAL'
+      
+      # DHCP Server for VLAN 10 (Data)
+      set service dhcp-server shared-network-name DATA subnet 192.168.10.0/24 default-router '192.168.10.1'
+      set service dhcp-server shared-network-name DATA subnet 192.168.10.0/24 name-server '8.8.8.8'
+      set service dhcp-server shared-network-name DATA subnet 192.168.10.0/24 range 0 start '192.168.10.100'
+      set service dhcp-server shared-network-name DATA subnet 192.168.10.0/24 range 0 stop '192.168.10.199'
+      
+      # DHCP Server for VLAN 20 (VoIP)
+      set service dhcp-server shared-network-name VOIP subnet 192.168.20.0/24 default-router '192.168.20.1'
+      set service dhcp-server shared-network-name VOIP subnet 192.168.20.0/24 name-server '8.8.8.8'
+      set service dhcp-server shared-network-name VOIP subnet 192.168.20.0/24 range 0 start '192.168.20.100'
+      set service dhcp-server shared-network-name VOIP subnet 192.168.20.0/24 range 0 stop '192.168.20.199'
+      
+      # Add default gateway dummy route for DHCP to function if it checks routing strictly
+      set protocols static route 0.0.0.0/0 dhcp-interface eth0
+      
+      commit
+      save
+    SHELL
+  end
+
+  # ======================================================================
+  # 2. Core-Switch (VyOS)
+  # ======================================================================
+  config.vm.define "core-switch" do |node|
+    node.vm.box = VYOS_BOX
+    node.vm.hostname = "core-switch"
+    
+    # eth1: Connection to Edge-Router
+    node.vm.network "private_network", virtualbox__intnet: "edge_core", auto_config: false
+    # eth2: 802.1Q Trunk to Access-Switch
+    node.vm.network "private_network", virtualbox__intnet: "core_access", auto_config: false
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "core-switch"
+      vb.memory = "1024"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      source /opt/vyatta/etc/functions/script-template
+      configure
+      
+      # Uplink to Edge Router
+      set interfaces ethernet eth1 address '10.0.0.2/30'
+      set interfaces ethernet eth1 description 'To-Edge-Router'
+      
+      # Trunk to Access Switch and VLAN SVIs
+      set interfaces ethernet eth2 description 'Trunk-To-Access-Switch'
+      set interfaces ethernet eth2 vif 10 address '192.168.10.1/24'
+      set interfaces ethernet eth2 vif 10 description 'VLAN10-DATA'
+      set interfaces ethernet eth2 vif 20 address '192.168.20.1/24'
+      set interfaces ethernet eth2 vif 20 description 'VLAN20-VOIP'
+      
+      # Default Route towards Edge
+      set protocols static route 0.0.0.0/0 next-hop '10.0.0.1'
+      
+      # DHCP Relay pointing to Edge-Router
+      set service dhcp-relay interface 'eth1'
+      set service dhcp-relay interface 'eth2.10'
+      set service dhcp-relay interface 'eth2.20'
+      set service dhcp-relay server '10.0.0.1'
+      
+      commit
+      save
+    SHELL
+  end
+
+  # ======================================================================
+  # 3. Access-Switch (VyOS)
+  # ======================================================================
+  config.vm.define "access-switch" do |node|
+    node.vm.box = VYOS_BOX
+    node.vm.hostname = "access-switch"
+    
+    # eth1: Trunk from Core
+    node.vm.network "private_network", virtualbox__intnet: "core_access", auto_config: false
+    # eth2: Access port for PC-Admin
+    node.vm.network "private_network", virtualbox__intnet: "vlan10_pc", auto_config: false
+    # eth3: Access port for VoIP-Phone
+    node.vm.network "private_network", virtualbox__intnet: "vlan20_voip", auto_config: false
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "access-switch"
+      vb.memory = "1024"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      source /opt/vyatta/etc/functions/script-template
+      configure
+      
+      # Configure L2 Bridge for VLAN-aware switching
+      set interfaces bridge br0 enable-vlan-aware
+      
+      # eth1 (Trunk to Core-Switch)
+      set interfaces ethernet eth1 description 'Trunk-To-Core-Switch'
+      set interfaces bridge br0 member interface eth1 allowed-vlan '10'
+      set interfaces bridge br0 member interface eth1 allowed-vlan '20'
+      
+      # eth2 (Access VLAN 10 -> PC-Admin)
+      set interfaces ethernet eth2 description 'Access-PC-Admin'
+      set interfaces bridge br0 member interface eth2 native-vlan '10'
+      
+      # eth3 (Access VLAN 20 -> VoIP-Phone)
+      set interfaces ethernet eth3 description 'Access-VoIP-Phone'
+      set interfaces bridge br0 member interface eth3 native-vlan '20'
+      
+      commit
+      save
+    SHELL
+  end
+
+  # ======================================================================
+  # 4. Endpoints (Alpine)
+  # ======================================================================
+  config.vm.define "pc-admin" do |node|
+    node.vm.box = ALPINE_BOX
+    node.vm.hostname = "pc-admin"
+    node.vm.network "private_network", virtualbox__intnet: "vlan10_pc", auto_config: false
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "pc-admin"
+      vb.memory = "512"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      cat <<EOF >> /etc/network/interfaces
+
+auto eth1
+iface eth1 inet static
+  address 192.168.10.50
+  netmask 255.255.255.0
+  gateway 192.168.10.1
+EOF
+      ifup eth1
+    SHELL
+  end
+
+  config.vm.define "voip-phone" do |node|
+    node.vm.box = ALPINE_BOX
+    node.vm.hostname = "voip-phone"
+    node.vm.network "private_network", virtualbox__intnet: "vlan20_voip", auto_config: false
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "voip-phone"
+      vb.memory = "512"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      cat <<EOF >> /etc/network/interfaces
+
+auto eth1
+iface eth1 inet static
+  address 192.168.20.50
+  netmask 255.255.255.0
+  gateway 192.168.20.1
+EOF
+      ifup eth1
+    SHELL
+  end
+
+end

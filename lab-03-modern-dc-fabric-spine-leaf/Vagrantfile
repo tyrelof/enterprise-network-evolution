@@ -1,0 +1,523 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+VAGRANTFILE_API_VERSION = "2"
+
+# =================================================================
+# VyOS Provisioning Scripts
+# =================================================================
+
+$script_spine1 = <<-SCRIPT
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
+configure
+set interfaces loopback lo address 10.255.0.1/32
+set interfaces ethernet eth1 description 'TO_LEAF1'
+set interfaces ethernet eth1 address 10.0.1.1/30
+set interfaces ethernet eth2 description 'TO_LEAF2'
+set interfaces ethernet eth2 address 10.0.1.5/30
+set interfaces ethernet eth3 description 'TO_LEAF3'
+set interfaces ethernet eth3 address 10.0.1.9/30
+set interfaces ethernet eth4 description 'TO_LEAF4'
+set interfaces ethernet eth4 address 10.0.1.13/30
+
+set protocols bgp system-as 65001
+set protocols bgp parameters router-id 10.255.0.1
+set protocols bgp parameters default multipath
+
+set protocols bgp neighbor 10.0.1.2 remote-as 65101
+set protocols bgp neighbor 10.0.1.2 description 'LEAF1'
+set protocols bgp neighbor 10.0.1.2 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.1.6 remote-as 65102
+set protocols bgp neighbor 10.0.1.6 description 'LEAF2'
+set protocols bgp neighbor 10.0.1.6 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.1.10 remote-as 65103
+set protocols bgp neighbor 10.0.1.10 description 'LEAF3'
+set protocols bgp neighbor 10.0.1.10 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.1.14 remote-as 65104
+set protocols bgp neighbor 10.0.1.14 description 'LEAF4'
+set protocols bgp neighbor 10.0.1.14 address-family ipv4-unicast
+
+set protocols bgp address-family ipv4-unicast network 10.255.0.1/32
+commit
+save
+SCRIPT
+
+$script_spine2 = <<-SCRIPT
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
+configure
+set interfaces loopback lo address 10.255.0.2/32
+set interfaces ethernet eth1 description 'TO_LEAF1'
+set interfaces ethernet eth1 address 10.0.2.1/30
+set interfaces ethernet eth2 description 'TO_LEAF2'
+set interfaces ethernet eth2 address 10.0.2.5/30
+set interfaces ethernet eth3 description 'TO_LEAF3'
+set interfaces ethernet eth3 address 10.0.2.9/30
+set interfaces ethernet eth4 description 'TO_LEAF4'
+set interfaces ethernet eth4 address 10.0.2.13/30
+
+set protocols bgp system-as 65001
+set protocols bgp parameters router-id 10.255.0.2
+set protocols bgp parameters default multipath
+
+set protocols bgp neighbor 10.0.2.2 remote-as 65101
+set protocols bgp neighbor 10.0.2.2 description 'LEAF1'
+set protocols bgp neighbor 10.0.2.2 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.2.6 remote-as 65102
+set protocols bgp neighbor 10.0.2.6 description 'LEAF2'
+set protocols bgp neighbor 10.0.2.6 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.2.10 remote-as 65103
+set protocols bgp neighbor 10.0.2.10 description 'LEAF3'
+set protocols bgp neighbor 10.0.2.10 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.2.14 remote-as 65104
+set protocols bgp neighbor 10.0.2.14 description 'LEAF4'
+set protocols bgp neighbor 10.0.2.14 address-family ipv4-unicast
+
+set protocols bgp address-family ipv4-unicast network 10.255.0.2/32
+commit
+save
+SCRIPT
+
+$script_leaf1 = <<-SCRIPT
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
+configure
+set interfaces loopback lo address 10.255.0.11/32
+set interfaces ethernet eth1 description 'TO_SPINE1'
+set interfaces ethernet eth1 address 10.0.1.2/30
+set interfaces ethernet eth2 description 'TO_SPINE2'
+set interfaces ethernet eth2 address 10.0.2.2/30
+set interfaces ethernet eth3 vif 10 description 'EKS_WORKER_NODES'
+set interfaces ethernet eth3 vif 10 address 10.10.10.1/24
+set interfaces ethernet eth4 description 'TO_EDGE_ROUTER'
+set interfaces ethernet eth4 address 10.0.0.2/30
+
+set protocols bgp system-as 65101
+set protocols bgp parameters router-id 10.255.0.11
+set protocols bgp parameters default multipath
+
+set protocols bgp neighbor 10.0.1.1 remote-as 65001
+set protocols bgp neighbor 10.0.1.1 description 'SPINE1'
+set protocols bgp neighbor 10.0.1.1 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.2.1 remote-as 65001
+set protocols bgp neighbor 10.0.2.1 description 'SPINE2'
+set protocols bgp neighbor 10.0.2.1 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.0.1 remote-as 65000
+set protocols bgp neighbor 10.0.0.1 description 'EDGE_ROUTER'
+set protocols bgp neighbor 10.0.0.1 address-family ipv4-unicast
+
+set protocols bgp address-family ipv4-unicast network 10.255.0.11/32
+set protocols bgp address-family ipv4-unicast network 10.10.10.0/24
+commit
+save
+SCRIPT
+
+$script_leaf2 = <<-SCRIPT
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
+configure
+set interfaces loopback lo address 10.255.0.12/32
+set interfaces ethernet eth1 description 'TO_SPINE1'
+set interfaces ethernet eth1 address 10.0.1.6/30
+set interfaces ethernet eth2 description 'TO_SPINE2'
+set interfaces ethernet eth2 address 10.0.2.6/30
+
+set interfaces ethernet eth3 vif 10 description 'STATEFUL_SERVERS'
+set interfaces ethernet eth3 vif 10 address 10.10.20.1/24
+
+set protocols bgp system-as 65102
+set protocols bgp parameters router-id 10.255.0.12
+set protocols bgp parameters default multipath
+
+set protocols bgp neighbor 10.0.1.5 remote-as 65001
+set protocols bgp neighbor 10.0.1.5 description 'SPINE1'
+set protocols bgp neighbor 10.0.1.5 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.2.5 remote-as 65001
+set protocols bgp neighbor 10.0.2.5 description 'SPINE2'
+set protocols bgp neighbor 10.0.2.5 address-family ipv4-unicast
+
+set protocols bgp address-family ipv4-unicast network 10.255.0.12/32
+set protocols bgp address-family ipv4-unicast network 10.10.20.0/24
+commit
+save
+SCRIPT
+
+$script_leaf3 = <<-SCRIPT
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
+configure
+set interfaces loopback lo address 10.255.0.13/32
+set interfaces ethernet eth1 description 'TO_SPINE1'
+set interfaces ethernet eth1 address 10.0.1.10/30
+set interfaces ethernet eth2 description 'TO_SPINE2'
+set interfaces ethernet eth2 address 10.0.2.10/30
+
+set interfaces ethernet eth3 vif 10 description 'STORAGE_ARRAY'
+set interfaces ethernet eth3 vif 10 address 10.10.30.1/24
+
+set protocols bgp system-as 65103
+set protocols bgp parameters router-id 10.255.0.13
+set protocols bgp parameters default multipath
+
+set protocols bgp neighbor 10.0.1.9 remote-as 65001
+set protocols bgp neighbor 10.0.1.9 description 'SPINE1'
+set protocols bgp neighbor 10.0.1.9 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.2.9 remote-as 65001
+set protocols bgp neighbor 10.0.2.9 description 'SPINE2'
+set protocols bgp neighbor 10.0.2.9 address-family ipv4-unicast
+
+set protocols bgp address-family ipv4-unicast network 10.255.0.13/32
+set protocols bgp address-family ipv4-unicast network 10.10.30.0/24
+commit
+save
+SCRIPT
+
+$script_leaf4 = <<-SCRIPT
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
+configure
+set interfaces loopback lo address 10.255.0.14/32
+set interfaces ethernet eth1 description 'TO_SPINE1'
+set interfaces ethernet eth1 address 10.0.1.14/30
+set interfaces ethernet eth2 description 'TO_SPINE2'
+set interfaces ethernet eth2 address 10.0.2.14/30
+
+set interfaces ethernet eth3 vif 10 description 'FIREWALL_CLUSTER'
+set interfaces ethernet eth3 vif 10 address 10.10.40.1/24
+
+set protocols bgp system-as 65104
+set protocols bgp parameters router-id 10.255.0.14
+set protocols bgp parameters default multipath
+
+set protocols bgp neighbor 10.0.1.13 remote-as 65001
+set protocols bgp neighbor 10.0.1.13 description 'SPINE1'
+set protocols bgp neighbor 10.0.1.13 address-family ipv4-unicast
+
+set protocols bgp neighbor 10.0.2.13 remote-as 65001
+set protocols bgp neighbor 10.0.2.13 description 'SPINE2'
+set protocols bgp neighbor 10.0.2.13 address-family ipv4-unicast
+
+set protocols bgp address-family ipv4-unicast network 10.255.0.14/32
+set protocols bgp address-family ipv4-unicast network 10.10.40.0/24
+commit
+save
+SCRIPT
+
+$script_edge = <<-SCRIPT
+#!/bin/vbash
+source /opt/vyatta/etc/functions/script-template
+configure
+set interfaces loopback lo address 10.255.255.254/32
+set interfaces ethernet eth1 description 'TO_LEAF1'
+set interfaces ethernet eth1 address 10.0.0.1/30
+
+# eth0 is NAT out to the internet via Vagrant VirtualBox default network, so it will get a default route via DHCP.
+# Advertise a default route into BGP to Leaf 1
+set protocols bgp system-as 65000
+set protocols bgp parameters router-id 10.255.255.254
+
+set protocols bgp neighbor 10.0.0.2 remote-as 65101
+set protocols bgp neighbor 10.0.0.2 description 'LEAF1'
+# The following syntax allows advertising a default route to the BGP peer on VyOS 1.4-rolling
+set protocols bgp neighbor 10.0.0.2 address-family ipv4-unicast default-originate
+
+set protocols bgp address-family ipv4-unicast network 10.255.255.254/32
+commit
+save
+SCRIPT
+
+$script_server_eks = <<-SCRIPT
+#!/bin/sh
+ip link set eth1 up
+# Create the 802.1Q tagged interface since the Leaf expects 'vif 10'
+ip link add link eth1 name eth1.10 type vlan id 10 2>/dev/null || true
+ip addr add 10.10.10.50/24 dev eth1.10 2>/dev/null || true
+ip link set eth1.10 up
+ip route replace default via 10.10.10.1 dev eth1.10
+SCRIPT
+
+$script_server_stateful = <<-SCRIPT
+#!/bin/sh
+ip link set eth1 up
+# Create the 802.1Q tagged interface since the Leaf expects 'vif 10'
+ip link add link eth1 name eth1.10 type vlan id 10 2>/dev/null || true
+ip addr add 10.10.20.50/24 dev eth1.10 2>/dev/null || true
+ip link set eth1.10 up
+ip route replace default via 10.10.20.1 dev eth1.10
+SCRIPT
+
+$script_server_storage = <<-SCRIPT
+#!/bin/sh
+ip link set eth1 up
+ip link add link eth1 name eth1.10 type vlan id 10 2>/dev/null || true
+ip addr add 10.10.30.50/24 dev eth1.10 2>/dev/null || true
+ip link set eth1.10 up
+ip route replace default via 10.10.30.1 dev eth1.10
+SCRIPT
+
+$script_server_firewall = <<-SCRIPT
+#!/bin/sh
+ip link set eth1 up
+ip link add link eth1 name eth1.10 type vlan id 10 2>/dev/null || true
+ip addr add 10.10.40.50/24 dev eth1.10 2>/dev/null || true
+ip link set eth1.10 up
+ip route replace default via 10.10.40.1 dev eth1.10
+SCRIPT
+
+# =================================================================
+# VM Build Definitions
+# =================================================================
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  # Global setting so boxes don't constantly check for updates
+  config.vm.box_check_update = false
+
+  # ==============================
+  # SPINE 1
+  # ==============================
+  config.vm.define "spine1" do |node|
+    node.vm.box = "vyos/1.4-rolling"
+    node.vm.hostname = "spine1"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 2
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc3", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc4", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc5", "allow-all"]
+    end
+
+    node.vm.network "private_network", virtualbox__intnet: "s1-l1-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "s1-l2-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "s1-l3-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "s1-l4-link", auto_config: false, nic_type: "virtio"
+    
+    node.vm.provision "shell", run: "once", inline: $script_spine1
+  end
+
+  # ==============================
+  # SPINE 2
+  # ==============================
+  config.vm.define "spine2" do |node|
+    node.vm.box = "vyos/1.4-rolling"
+    node.vm.hostname = "spine2"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 2
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc3", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc4", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc5", "allow-all"]
+    end
+
+    node.vm.network "private_network", virtualbox__intnet: "s2-l1-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "s2-l2-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "s2-l3-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "s2-l4-link", auto_config: false, nic_type: "virtio"
+    
+    node.vm.provision "shell", run: "once", inline: $script_spine2
+  end
+
+  # ==============================
+  # EDGE ROUTER
+  # ==============================
+  config.vm.define "edge" do |node|
+    node.vm.box = "vyos/1.4-rolling"
+    node.vm.hostname = "edge"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 2
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+
+    # eth1 connects to Border Leaf (Leaf 1)
+    node.vm.network "private_network", virtualbox__intnet: "edge-to-border", auto_config: false, nic_type: "virtio"
+    
+    node.vm.provision "shell", run: "once", inline: $script_edge
+  end
+
+  # ==============================
+  # LEAF 1 (Border Leaf)
+  # ==============================
+  config.vm.define "leaf1" do |node|
+    node.vm.box = "vyos/1.4-rolling"
+    node.vm.hostname = "leaf1"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 2
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc3", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc4", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc5", "allow-all"]
+    end
+
+    node.vm.network "private_network", virtualbox__intnet: "s1-l1-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "s2-l1-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "leaf1-vlan10", auto_config: false, nic_type: "virtio"
+    # eth4 -> TO EDGE ROUTER
+    node.vm.network "private_network", virtualbox__intnet: "edge-to-border", auto_config: false, nic_type: "virtio"
+    
+    node.vm.provision "shell", run: "once", inline: $script_leaf1
+  end
+
+  # ==============================
+  # LEAF 2
+  # ==============================
+  config.vm.define "leaf2" do |node|
+    node.vm.box = "vyos/1.4-rolling"
+    node.vm.hostname = "leaf2"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 2
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc3", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc4", "allow-all"]
+    end
+
+    node.vm.network "private_network", virtualbox__intnet: "s1-l2-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "s2-l2-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "leaf2-vlan10", auto_config: false, nic_type: "virtio"
+    
+    node.vm.provision "shell", run: "once", inline: $script_leaf2
+  end
+
+  # ==============================
+  # LEAF 3
+  # ==============================
+  config.vm.define "leaf3" do |node|
+    node.vm.box = "vyos/1.4-rolling"
+    node.vm.hostname = "leaf3"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 2
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc3", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc4", "allow-all"]
+    end
+
+    node.vm.network "private_network", virtualbox__intnet: "s1-l3-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "s2-l3-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "leaf3-vlan10", auto_config: false, nic_type: "virtio"
+    
+    node.vm.provision "shell", run: "once", inline: $script_leaf3
+  end
+
+  # ==============================
+  # LEAF 4
+  # ==============================
+  config.vm.define "leaf4" do |node|
+    node.vm.box = "vyos/1.4-rolling"
+    node.vm.hostname = "leaf4"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 2
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc3", "allow-all"]
+      vb.customize ["modifyvm", :id, "--nicpromisc4", "allow-all"]
+    end
+
+    node.vm.network "private_network", virtualbox__intnet: "s1-l4-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "s2-l4-link", auto_config: false, nic_type: "virtio"
+    node.vm.network "private_network", virtualbox__intnet: "leaf4-vlan10", auto_config: false, nic_type: "virtio"
+    
+    node.vm.provision "shell", run: "once", inline: $script_leaf4
+  end
+
+  # ==============================
+  # SERVER: EKS Worker Nodes
+  # ==============================
+  config.vm.define "server-eks" do |node|
+    node.vm.box = "generic/alpine319"
+    node.vm.hostname = "eks-worker"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "512"
+      vb.cpus = 1
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+
+    node.vm.network "private_network", virtualbox__intnet: "leaf1-vlan10", auto_config: false, nic_type: "virtio"
+    node.vm.provision "shell", run: "always", inline: $script_server_eks
+  end
+
+  # ==============================
+  # SERVER: Stateful Servers
+  # ==============================
+  config.vm.define "server-stateful" do |node|
+    node.vm.box = "generic/alpine319"
+    node.vm.hostname = "stateful-svr"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "512"
+      vb.cpus = 1
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+
+    node.vm.network "private_network", virtualbox__intnet: "leaf2-vlan10", auto_config: false, nic_type: "virtio"
+    node.vm.provision "shell", run: "always", inline: $script_server_stateful
+  end
+
+  # ==============================
+  # SERVER: Storage Array
+  # ==============================
+  config.vm.define "server-storage" do |node|
+    node.vm.box = "generic/alpine319"
+    node.vm.hostname = "storage-array"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "512"
+      vb.cpus = 1
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+
+    node.vm.network "private_network", virtualbox__intnet: "leaf3-vlan10", auto_config: false, nic_type: "virtio"
+    node.vm.provision "shell", run: "always", inline: $script_server_storage
+  end
+
+  # ==============================
+  # SERVER: Firewall Cluster
+  # ==============================
+  config.vm.define "server-firewall" do |node|
+    node.vm.box = "generic/alpine319"
+    node.vm.hostname = "firewall-cls"
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "512"
+      vb.cpus = 1
+      vb.customize ["modifyvm", :id, "--audio", "none", "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+
+    node.vm.network "private_network", virtualbox__intnet: "leaf4-vlan10", auto_config: false, nic_type: "virtio"
+    node.vm.provision "shell", run: "always", inline: $script_server_firewall
+  end
+
+end

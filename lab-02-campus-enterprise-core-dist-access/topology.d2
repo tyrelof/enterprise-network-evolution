@@ -1,0 +1,79 @@
+direction: down
+
+classes: {
+  core: {
+    shape: hexagon
+    style: {
+      fill: "#39FF14"
+      stroke: "#16a34a"
+      stroke-width: 2
+      border-radius: 10
+      shadow: true
+    }
+  }
+  dist: {
+    shape: parallelogram
+    style: {
+      fill: "#ccfbf1"
+      stroke: "#0d9488"
+      border-radius: 10
+      shadow: true
+    }
+  }
+  access: {
+    shape: queue
+    style: {
+      fill: "#dcfce7"
+      stroke: "#16a34a"
+      border-radius: 10
+      shadow: true
+    }
+  }
+  endpoint: {
+    shape: rectangle
+    style: {
+      fill: "#0047AB"
+      stroke: "#002366"
+      stroke-width: 2
+      font-color: white
+      border-radius: 10
+      shadow: true
+    }
+  }
+}
+
+Core Layer: {
+  core-01: Core-01\nAS 65010 { class: core }
+  core-02: Core-02\nAS 65020 { class: core }
+}
+
+Distribution Layer: {
+  dist-01: Dist-01\nVRRP Master { class: dist }
+  dist-02: Dist-02\nVRRP Master { class: dist }
+}
+
+Access Layer: {
+  access-01: Access-01 { class: access }
+  access-02: Access-02 { class: access }
+}
+
+Endpoints: {
+  eng-workstation: Engineering\nWorkstation { class: endpoint }
+  mkt-workstation: Marketing\nWorkstation { class: endpoint }
+}
+
+Core Layer.core-01 <-> Core Layer.core-02: eBGP Mesh
+Core Layer.core-01 <-> Distribution Layer.dist-01: L3
+Core Layer.core-01 <-> Distribution Layer.dist-02: L3
+Core Layer.core-02 <-> Distribution Layer.dist-01: L3
+Core Layer.core-02 <-> Distribution Layer.dist-02: L3
+
+Distribution Layer.dist-01 <-> Distribution Layer.dist-02: Trunk
+
+Distribution Layer.dist-01 <-> Access Layer.access-01: LACP
+Distribution Layer.dist-01 <-> Access Layer.access-02: LACP
+Distribution Layer.dist-02 <-> Access Layer.access-01: LACP
+Distribution Layer.dist-02 <-> Access Layer.access-02: LACP
+
+Access Layer.access-01 -> Endpoints.eng-workstation: VLAN 200
+Access Layer.access-02 -> Endpoints.mkt-workstation: VLAN 300

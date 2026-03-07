@@ -1,0 +1,84 @@
+direction: down
+
+classes: {
+  spine: {
+    shape: parallelogram
+    style: {
+      fill: "#ffedd5"
+      stroke: "#ea580c"
+      border-radius: 5
+    }
+  }
+  leaf: {
+    shape: queue
+    style: {
+      fill: "#ccfbf1"
+      stroke: "#0d9488"
+      border-radius: 5
+    }
+  }
+  border: {
+    shape: queue
+    style: {
+      fill: "#fce7f3"
+      stroke: "#db2777"
+      border-radius: 5
+    }
+  }
+  edge: {
+    shape: rectangle
+    style: {
+      fill: "#e0f2fe"
+      stroke: "#0284c7"
+      border-radius: 5
+    }
+  }
+  server: {
+    shape: rectangle
+    style: {
+      fill: "#f3f4f6"
+      stroke: "#4b5563"
+      border-radius: 5
+    }
+  }
+}
+
+Edge: {
+  edge-router: Edge Router\nNorth-South Traffic { class: edge }
+}
+
+Spine Layer: {
+  spine1: Spine-1\nBGP Backbone { class: spine }
+  spine2: Spine-2\nBGP Backbone { class: spine }
+}
+
+Leaf Layer: {
+  leaf1: Leaf-1 (Border)\nBGP & External { class: border }
+  leaf2: Leaf-2\nBGP { class: leaf }
+  leaf3: Leaf-3\nBGP { class: leaf }
+  leaf4: Leaf-4\nBGP { class: leaf }
+}
+
+Endpoints: {
+  server-eks: Server (EKS)\nConnected to Leaf-2 { class: server }
+  server-stateful: Server (Stateful DB)\nConnected to Leaf-2 { class: server }
+  server-storage: Server (Storage/Ceph)\nConnected to Leaf-3 { class: server }
+  server-firewall: Server (Firewall/Services)\nConnected to Leaf-4 { class: server }
+}
+
+Edge.edge-router <-> Leaf Layer.leaf1: External Link
+
+Spine Layer.spine1 <-> Leaf Layer.leaf1: eBGP / ECMP
+Spine Layer.spine1 <-> Leaf Layer.leaf2: eBGP / ECMP
+Spine Layer.spine1 <-> Leaf Layer.leaf3: eBGP / ECMP
+Spine Layer.spine1 <-> Leaf Layer.leaf4: eBGP / ECMP
+
+Spine Layer.spine2 <-> Leaf Layer.leaf1: eBGP / ECMP
+Spine Layer.spine2 <-> Leaf Layer.leaf2: eBGP / ECMP
+Spine Layer.spine2 <-> Leaf Layer.leaf3: eBGP / ECMP
+Spine Layer.spine2 <-> Leaf Layer.leaf4: eBGP / ECMP
+
+Leaf Layer.leaf2 -> Endpoints.server-eks: Internal Link
+Leaf Layer.leaf2 -> Endpoints.server-stateful: Internal Link
+Leaf Layer.leaf3 -> Endpoints.server-storage: Internal Link
+Leaf Layer.leaf4 -> Endpoints.server-firewall: Internal Link

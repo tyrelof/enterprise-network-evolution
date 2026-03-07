@@ -1,0 +1,476 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+VAGRANTFILE_API_VERSION = "2"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  ALPINE_BOX = "generic/alpine318"
+  VYOS_BOX = "vyos/vyos"
+
+  # ======================================================================
+  # 1. CORE LAYER (BGP Peering, high-speed routing)
+  # ======================================================================
+  config.vm.define "core-01" do |node|
+    node.vm.box = VYOS_BOX
+    node.vm.hostname = "core-01"
+    
+    # eth1: core_peer (10.0.0.1)
+    node.vm.network "private_network", virtualbox__intnet: "core_peer", auto_config: false
+    # eth2: c1_d1 (10.0.1.1)
+    node.vm.network "private_network", virtualbox__intnet: "c1_d1", auto_config: false
+    # eth3: c1_d2 (10.0.1.5)
+    node.vm.network "private_network", virtualbox__intnet: "c1_d2", auto_config: false
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "core-01"
+      vb.memory = "1024"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      source /opt/vyatta/etc/functions/script-template
+      configure
+      
+      set interfaces ethernet eth1 address '10.0.0.1/30'
+      set interfaces ethernet eth1 description 'To-Core-02'
+      set interfaces ethernet eth2 address '10.0.1.1/30'
+      set interfaces ethernet eth2 description 'To-Dist-01'
+      set interfaces ethernet eth3 address '10.0.1.5/30'
+      set interfaces ethernet eth3 description 'To-Dist-02'
+      set interfaces loopback lo address '10.255.255.1/32'
+
+      set protocols bgp system-as '65010'
+      set protocols bgp address-family ipv4-unicast network '10.255.255.1/32'
+      set protocols bgp address-family ipv4-unicast network '10.0.0.0/30'
+      set protocols bgp address-family ipv4-unicast network '10.0.1.0/30'
+      set protocols bgp address-family ipv4-unicast network '10.0.1.4/30'
+
+      set protocols bgp neighbor 10.0.0.2 remote-as '65020'
+      set protocols bgp neighbor 10.0.0.2 description 'Core-02'
+      set protocols bgp neighbor 10.0.1.2 remote-as '65110'
+      set protocols bgp neighbor 10.0.1.2 description 'Dist-01'
+      set protocols bgp neighbor 10.0.1.6 remote-as '65120'
+      set protocols bgp neighbor 10.0.1.6 description 'Dist-02'
+      
+      commit
+      save
+    SHELL
+  end
+
+  config.vm.define "core-02" do |node|
+    node.vm.box = VYOS_BOX
+    node.vm.hostname = "core-02"
+    
+    # eth1: core_peer (10.0.0.2)
+    node.vm.network "private_network", virtualbox__intnet: "core_peer", auto_config: false
+    # eth2: c2_d1 (10.0.1.9)
+    node.vm.network "private_network", virtualbox__intnet: "c2_d1", auto_config: false
+    # eth3: c2_d2 (10.0.1.13)
+    node.vm.network "private_network", virtualbox__intnet: "c2_d2", auto_config: false
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "core-02"
+      vb.memory = "1024"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      source /opt/vyatta/etc/functions/script-template
+      configure
+      
+      set interfaces ethernet eth1 address '10.0.0.2/30'
+      set interfaces ethernet eth1 description 'To-Core-01'
+      set interfaces ethernet eth2 address '10.0.1.9/30'
+      set interfaces ethernet eth2 description 'To-Dist-01'
+      set interfaces ethernet eth3 address '10.0.1.13/30'
+      set interfaces ethernet eth3 description 'To-Dist-02'
+      set interfaces loopback lo address '10.255.255.2/32'
+
+      set protocols bgp system-as '65020'
+      set protocols bgp address-family ipv4-unicast network '10.255.255.2/32'
+      set protocols bgp address-family ipv4-unicast network '10.0.0.0/30'
+      set protocols bgp address-family ipv4-unicast network '10.0.1.8/30'
+      set protocols bgp address-family ipv4-unicast network '10.0.1.12/30'
+
+      set protocols bgp neighbor 10.0.0.1 remote-as '65010'
+      set protocols bgp neighbor 10.0.0.1 description 'Core-01'
+      set protocols bgp neighbor 10.0.1.10 remote-as '65110'
+      set protocols bgp neighbor 10.0.1.10 description 'Dist-01'
+      set protocols bgp neighbor 10.0.1.14 remote-as '65120'
+      set protocols bgp neighbor 10.0.1.14 description 'Dist-02'
+      
+      commit
+      save
+    SHELL
+  end
+
+  # ======================================================================
+  # 2. DISTRIBUTION LAYER (VRRP, L2/L3 Boundary, EtherChannels)
+  # ======================================================================
+  config.vm.define "dist-01" do |node|
+    node.vm.box = VYOS_BOX
+    node.vm.hostname = "dist-01"
+    
+    node.vm.network "private_network", virtualbox__intnet: "c1_d1", auto_config: false # eth1
+    node.vm.network "private_network", virtualbox__intnet: "c2_d1", auto_config: false # eth2
+    node.vm.network "private_network", virtualbox__intnet: "dist_peer", auto_config: false # eth3
+    
+    node.vm.network "private_network", virtualbox__intnet: "a1_d1_a", auto_config: false # eth4
+    node.vm.network "private_network", virtualbox__intnet: "a1_d1_b", auto_config: false # eth5
+    node.vm.network "private_network", virtualbox__intnet: "a2_d1_a", auto_config: false # eth6
+    node.vm.network "private_network", virtualbox__intnet: "a2_d1_b", auto_config: false # eth7
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "dist-01"
+      vb.memory = "1024"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      source /opt/vyatta/etc/functions/script-template
+      configure
+      
+      # L3 Uplinks to Core
+      set interfaces ethernet eth1 address '10.0.1.2/30'
+      set interfaces ethernet eth1 description 'To-Core-01'
+      set interfaces ethernet eth2 address '10.0.1.10/30'
+      set interfaces ethernet eth2 description 'To-Core-02'
+      set interfaces loopback lo address '10.255.255.3/32'
+
+      # L2 EtherChannels (LACP) to Access
+      set interfaces bonding bond0 hash-policy layer2
+      set interfaces bonding bond0 mode 802.3ad
+      set interfaces bonding bond0 member interface eth4
+      set interfaces bonding bond0 member interface eth5
+      set interfaces bonding bond0 description 'LACP-To-Access-01'
+
+      set interfaces bonding bond1 hash-policy layer2
+      set interfaces bonding bond1 mode 802.3ad
+      set interfaces bonding bond1 member interface eth6
+      set interfaces bonding bond1 member interface eth7
+      set interfaces bonding bond1 description 'LACP-To-Access-02'
+
+      # L2 Bridge for VLANs
+      set interfaces bridge br0 enable-vlan-aware
+      set interfaces bridge br0 stp enable
+      set interfaces bridge br0 priority 4096
+      
+      # Add trunks to bridge
+      set interfaces ethernet eth3 description 'Trunk-To-Dist-02'
+      set interfaces bridge br0 member interface eth3 allowed-vlan 100
+      set interfaces bridge br0 member interface eth3 allowed-vlan 200
+      set interfaces bridge br0 member interface eth3 allowed-vlan 300
+      
+      set interfaces bridge br0 member interface bond0 allowed-vlan 100
+      set interfaces bridge br0 member interface bond0 allowed-vlan 200
+      set interfaces bridge br0 member interface bond0 allowed-vlan 300
+      
+      set interfaces bridge br0 member interface bond1 allowed-vlan 100
+      set interfaces bridge br0 member interface bond1 allowed-vlan 200
+      set interfaces bridge br0 member interface bond1 allowed-vlan 300
+
+      # Bridge SVIs
+      set interfaces bridge br0 vif 100 address '10.0.100.2/24'
+      set interfaces bridge br0 vif 100 description 'VLAN100-MGMT'
+      set interfaces bridge br0 vif 200 address '10.0.200.2/24'
+      set interfaces bridge br0 vif 200 description 'VLAN200-ENG'
+      set interfaces bridge br0 vif 300 address '10.0.300.2/24'
+      set interfaces bridge br0 vif 300 description 'VLAN300-MKT'
+
+      # VRRP Setup (Dist-01 is Master for Mgmt/Eng, Backup for Mkt)
+      set high-availability vrrp group Mgmt vrid 100
+      set high-availability vrrp group Mgmt interface br0.100
+      set high-availability vrrp group Mgmt virtual-address '10.0.100.1/24'
+      set high-availability vrrp group Mgmt priority 200
+
+      set high-availability vrrp group Eng vrid 200
+      set high-availability vrrp group Eng interface br0.200
+      set high-availability vrrp group Eng virtual-address '10.0.200.1/24'
+      set high-availability vrrp group Eng priority 200
+
+      set high-availability vrrp group Mkt vrid 300
+      set high-availability vrrp group Mkt interface br0.300
+      set high-availability vrrp group Mkt virtual-address '10.0.300.1/24'
+      set high-availability vrrp group Mkt priority 100
+
+      # BGP Routing to Core
+      set protocols bgp system-as '65110'
+      set protocols bgp address-family ipv4-unicast network '10.255.255.3/32'
+      set protocols bgp address-family ipv4-unicast network '10.0.100.0/24'
+      set protocols bgp address-family ipv4-unicast network '10.0.200.0/24'
+      set protocols bgp address-family ipv4-unicast network '10.0.300.0/24'
+      
+      set protocols bgp neighbor 10.0.1.1 remote-as '65010' # Core-01
+      set protocols bgp neighbor 10.0.1.9 remote-as '65020' # Core-02
+      
+      commit
+      save
+    SHELL
+  end
+
+  config.vm.define "dist-02" do |node|
+    node.vm.box = VYOS_BOX
+    node.vm.hostname = "dist-02"
+    
+    node.vm.network "private_network", virtualbox__intnet: "c1_d2", auto_config: false # eth1
+    node.vm.network "private_network", virtualbox__intnet: "c2_d2", auto_config: false # eth2
+    node.vm.network "private_network", virtualbox__intnet: "dist_peer", auto_config: false # eth3
+    
+    node.vm.network "private_network", virtualbox__intnet: "a1_d2_a", auto_config: false # eth4
+    node.vm.network "private_network", virtualbox__intnet: "a1_d2_b", auto_config: false # eth5
+    node.vm.network "private_network", virtualbox__intnet: "a2_d2_a", auto_config: false # eth6
+    node.vm.network "private_network", virtualbox__intnet: "a2_d2_b", auto_config: false # eth7
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "dist-02"
+      vb.memory = "1024"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      source /opt/vyatta/etc/functions/script-template
+      configure
+      
+      # L3 Uplinks to Core
+      set interfaces ethernet eth1 address '10.0.1.6/30'
+      set interfaces ethernet eth1 description 'To-Core-01'
+      set interfaces ethernet eth2 address '10.0.1.14/30'
+      set interfaces ethernet eth2 description 'To-Core-02'
+      set interfaces loopback lo address '10.255.255.4/32'
+
+      # L2 EtherChannels (LACP) to Access
+      set interfaces bonding bond0 hash-policy layer2
+      set interfaces bonding bond0 mode 802.3ad
+      set interfaces bonding bond0 member interface eth4
+      set interfaces bonding bond0 member interface eth5
+      set interfaces bonding bond0 description 'LACP-To-Access-01'
+
+      set interfaces bonding bond1 hash-policy layer2
+      set interfaces bonding bond1 mode 802.3ad
+      set interfaces bonding bond1 member interface eth6
+      set interfaces bonding bond1 member interface eth7
+      set interfaces bonding bond1 description 'LACP-To-Access-02'
+
+      # L2 Bridge for VLANs
+      set interfaces bridge br0 enable-vlan-aware
+      set interfaces bridge br0 stp enable
+      set interfaces bridge br0 priority 8192
+      
+      # Add trunks to bridge
+      set interfaces ethernet eth3 description 'Trunk-To-Dist-01'
+      set interfaces bridge br0 member interface eth3 allowed-vlan 100
+      set interfaces bridge br0 member interface eth3 allowed-vlan 200
+      set interfaces bridge br0 member interface eth3 allowed-vlan 300
+      
+      set interfaces bridge br0 member interface bond0 allowed-vlan 100
+      set interfaces bridge br0 member interface bond0 allowed-vlan 200
+      set interfaces bridge br0 member interface bond0 allowed-vlan 300
+      
+      set interfaces bridge br0 member interface bond1 allowed-vlan 100
+      set interfaces bridge br0 member interface bond1 allowed-vlan 200
+      set interfaces bridge br0 member interface bond1 allowed-vlan 300
+
+      # Bridge SVIs
+      set interfaces bridge br0 vif 100 address '10.0.100.3/24'
+      set interfaces bridge br0 vif 100 description 'VLAN100-MGMT'
+      set interfaces bridge br0 vif 200 address '10.0.200.3/24'
+      set interfaces bridge br0 vif 200 description 'VLAN200-ENG'
+      set interfaces bridge br0 vif 300 address '10.0.300.3/24'
+      set interfaces bridge br0 vif 300 description 'VLAN300-MKT'
+
+      # VRRP Setup (Dist-02 is Backup for Mgmt/Eng, Master for Mkt)
+      set high-availability vrrp group Mgmt vrid 100
+      set high-availability vrrp group Mgmt interface br0.100
+      set high-availability vrrp group Mgmt virtual-address '10.0.100.1/24'
+      set high-availability vrrp group Mgmt priority 100
+
+      set high-availability vrrp group Eng vrid 200
+      set high-availability vrrp group Eng interface br0.200
+      set high-availability vrrp group Eng virtual-address '10.0.200.1/24'
+      set high-availability vrrp group Eng priority 100
+
+      set high-availability vrrp group Mkt vrid 300
+      set high-availability vrrp group Mkt interface br0.300
+      set high-availability vrrp group Mkt virtual-address '10.0.300.1/24'
+      set high-availability vrrp group Mkt priority 200
+
+      # BGP Routing to Core
+      set protocols bgp system-as '65120'
+      set protocols bgp address-family ipv4-unicast network '10.255.255.4/32'
+      set protocols bgp address-family ipv4-unicast network '10.0.100.0/24'
+      set protocols bgp address-family ipv4-unicast network '10.0.200.0/24'
+      set protocols bgp address-family ipv4-unicast network '10.0.300.0/24'
+      
+      set protocols bgp neighbor 10.0.1.5 remote-as '65010' # Core-01
+      set protocols bgp neighbor 10.0.1.13 remote-as '65020' # Core-02
+      
+      commit
+      save
+    SHELL
+  end
+
+  # ======================================================================
+  # 3. ACCESS LAYER (Layer 2 Only, Trunks & Access Ports)
+  # ======================================================================
+  config.vm.define "access-01" do |node|
+    node.vm.box = VYOS_BOX
+    node.vm.hostname = "access-01"
+    
+    node.vm.network "private_network", virtualbox__intnet: "a1_d1_a", auto_config: false # eth1
+    node.vm.network "private_network", virtualbox__intnet: "a1_d1_b", auto_config: false # eth2
+    node.vm.network "private_network", virtualbox__intnet: "a1_d2_a", auto_config: false # eth3
+    node.vm.network "private_network", virtualbox__intnet: "a1_d2_b", auto_config: false # eth4
+    node.vm.network "private_network", virtualbox__intnet: "vlan200_eng", auto_config: false # eth5
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "access-01"
+      vb.memory = "1024"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      source /opt/vyatta/etc/functions/script-template
+      configure
+      
+      # EtherChannels
+      set interfaces bonding bond0 hash-policy layer2
+      set interfaces bonding bond0 mode 802.3ad
+      set interfaces bonding bond0 member interface eth1
+      set interfaces bonding bond0 member interface eth2
+      set interfaces bonding bond0 description 'LACP-To-Dist-01'
+
+      set interfaces bonding bond1 hash-policy layer2
+      set interfaces bonding bond1 mode 802.3ad
+      set interfaces bonding bond1 member interface eth3
+      set interfaces bonding bond1 member interface eth4
+      set interfaces bonding bond1 description 'LACP-To-Dist-02'
+
+      # L2 Bridge Setup
+      set interfaces bridge br0 enable-vlan-aware
+      set interfaces bridge br0 stp enable
+      
+      # Add trunks to bridge
+      set interfaces bridge br0 member interface bond0 allowed-vlan 100
+      set interfaces bridge br0 member interface bond0 allowed-vlan 200
+      set interfaces bridge br0 member interface bond0 allowed-vlan 300
+      
+      set interfaces bridge br0 member interface bond1 allowed-vlan 100
+      set interfaces bridge br0 member interface bond1 allowed-vlan 200
+      set interfaces bridge br0 member interface bond1 allowed-vlan 300
+
+      # Add Access Port
+      set interfaces ethernet eth5 description 'Access-ENG-Workstation'
+      set interfaces bridge br0 member interface eth5 native-vlan 200
+
+      commit
+      save
+    SHELL
+  end
+
+  config.vm.define "access-02" do |node|
+    node.vm.box = VYOS_BOX
+    node.vm.hostname = "access-02"
+    
+    node.vm.network "private_network", virtualbox__intnet: "a2_d1_a", auto_config: false # eth1
+    node.vm.network "private_network", virtualbox__intnet: "a2_d1_b", auto_config: false # eth2
+    node.vm.network "private_network", virtualbox__intnet: "a2_d2_a", auto_config: false # eth3
+    node.vm.network "private_network", virtualbox__intnet: "a2_d2_b", auto_config: false # eth4
+    node.vm.network "private_network", virtualbox__intnet: "vlan300_mkt", auto_config: false # eth5
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "access-02"
+      vb.memory = "1024"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      source /opt/vyatta/etc/functions/script-template
+      configure
+      
+      # EtherChannels
+      set interfaces bonding bond0 hash-policy layer2
+      set interfaces bonding bond0 mode 802.3ad
+      set interfaces bonding bond0 member interface eth1
+      set interfaces bonding bond0 member interface eth2
+      set interfaces bonding bond0 description 'LACP-To-Dist-01'
+
+      set interfaces bonding bond1 hash-policy layer2
+      set interfaces bonding bond1 mode 802.3ad
+      set interfaces bonding bond1 member interface eth3
+      set interfaces bonding bond1 member interface eth4
+      set interfaces bonding bond1 description 'LACP-To-Dist-02'
+
+      # L2 Bridge Setup
+      set interfaces bridge br0 enable-vlan-aware
+      set interfaces bridge br0 stp enable
+      
+      # Add trunks to bridge
+      set interfaces bridge br0 member interface bond0 allowed-vlan 100
+      set interfaces bridge br0 member interface bond0 allowed-vlan 200
+      set interfaces bridge br0 member interface bond0 allowed-vlan 300
+      
+      set interfaces bridge br0 member interface bond1 allowed-vlan 100
+      set interfaces bridge br0 member interface bond1 allowed-vlan 200
+      set interfaces bridge br0 member interface bond1 allowed-vlan 300
+
+      # Add Access Port
+      set interfaces ethernet eth5 description 'Access-MKT-Workstation'
+      set interfaces bridge br0 member interface eth5 native-vlan 300
+
+      commit
+      save
+    SHELL
+  end
+
+  # ======================================================================
+  # 4. ENDPOINTS (Alpine)
+  # ======================================================================
+  config.vm.define "eng-workstation" do |node|
+    node.vm.box = ALPINE_BOX
+    node.vm.hostname = "eng-workstation"
+    node.vm.network "private_network", virtualbox__intnet: "vlan200_eng", auto_config: false
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "eng-workstation"
+      vb.memory = "512"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      cat <<EOF >> /etc/network/interfaces
+
+auto eth1
+iface eth1 inet static
+  address 10.0.200.50
+  netmask 255.255.255.0
+  gateway 10.0.200.1
+EOF
+      ifup eth1
+    SHELL
+  end
+
+  config.vm.define "mkt-workstation" do |node|
+    node.vm.box = ALPINE_BOX
+    node.vm.hostname = "mkt-workstation"
+    node.vm.network "private_network", virtualbox__intnet: "vlan300_mkt", auto_config: false
+    
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "mkt-workstation"
+      vb.memory = "512"
+      vb.cpus = 1
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      cat <<EOF >> /etc/network/interfaces
+
+auto eth1
+iface eth1 inet static
+  address 10.0.300.50
+  netmask 255.255.255.0
+  gateway 10.0.300.1
+EOF
+      ifup eth1
+    SHELL
+  end
+
+end
