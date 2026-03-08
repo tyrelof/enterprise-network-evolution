@@ -2,7 +2,7 @@
 *From Physical Silicon to Cloud-Native Networking*
 
 ## 📖 The "Accidental Admin" Journey
-This repository is a technical timeline of my professional evolution. Between **2012 and 2019**, I built and managed company-owned data centers from the ground up. I wasn't just a cloud consumer; I was the person running the cables, racking the Huawei and Dell PowerEdge servers, and configuring the physical silicon across Layers 1 through 7.
+This repository is a technical timeline of my professional evolution. Between **2012 and 2019**, I built and managed company-owned data centers from the ground up. I wasn't just a cloud consumer; I was the person running the cables, racking the Cisco, Huawei and Dell PowerEdge servers, and configuring the physical silicon across Layers 1 through 7.
 
 This project demonstrates my ability to design, automate, and maintain critical infrastructure using **Infrastructure as Code (Vagrant)** and **Modern Network Operating Systems (VyOS)**, bridging the gap between legacy physical environments and modern 2026 architectural standards.
 
